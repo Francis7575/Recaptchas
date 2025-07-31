@@ -15,38 +15,54 @@ export default function TurnstileWidget() {
     password: ""
   });
 
-  // Load Turnstile script once on mount
+  // Load Turnstile script once on mount and render widget immediately when ready
   useEffect(() => {
-    if (document.getElementById('turnstile-script')) return; // prevent multiple scripts
+    if (document.getElementById('turnstile-script')) {
+      // Script already loaded — try rendering immediately
+      if ((window as any).turnstile && widgetRef.current && !rendered) {
+        (window as any).turnstile.render(widgetRef.current, {
+          sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!,
+          theme: 'light',
+          callback: (token: string) => {
+            setToken(token);
+            console.log('Turnstile token:', token);
+          },
+          'error-callback': () => {
+            console.error('Error with Turnstile');
+            toast.error("Turnstile error. Please try again.");
+          },
+        });
+        setRendered(true);
+      }
+      return;
+    }
 
+    // Load the script and render the widget when ready
     const script = document.createElement('script');
     script.id = 'turnstile-script';
     script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
     script.async = true;
     script.defer = true;
+    script.onload = () => {
+      if ((window as any).turnstile && widgetRef.current && !rendered) {
+        (window as any).turnstile.render(widgetRef.current, {
+          sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!,
+          theme: 'light',
+          callback: (token: string) => {
+            setToken(token);
+            console.log('Turnstile token:', token);
+          },
+          'error-callback': () => {
+            console.error('Error with Turnstile');
+            toast.error("Turnstile error. Please try again.");
+          },
+        });
+        setRendered(true);
+      }
+    };
     document.body.appendChild(script);
-  }, []);
 
-  // Render widget when user clicks "Verify"
-  const handleRenderWidget = () => {
-    if ((window as any).turnstile && widgetRef.current && !rendered) {
-      (window as any).turnstile.render(widgetRef.current, {
-        sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!,
-        theme: 'light',
-        callback: (token: string) => {
-          setToken(token);
-          console.log('Turnstile token:', token);
-        },
-        'error-callback': () => {
-          console.error('Error with Turnstile');
-          toast.error("Turnstile error. Please try again.");
-        },
-      });
-      setRendered(true);
-    } else if (!(window as any).turnstile) {
-      toast.error("Turnstile script not loaded yet. Please wait.");
-    }
-  };
+  }, [rendered]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -73,7 +89,7 @@ export default function TurnstileWidget() {
         setFormData({ name: "", email: "", password: "" });
         setToken(null);
         setRendered(false);
-        widgetRef.current!.innerHTML = ""; // Clear widget for next use
+        if (widgetRef.current) widgetRef.current.innerHTML = ""; // Clear widget for next use
         toast.success("Enviado con éxito");
       } else {
         toast.error("Algo salió mal");
@@ -107,15 +123,6 @@ export default function TurnstileWidget() {
         </div>
 
         <div className="flex flex-col items-center mt-4">
-          {!rendered && (
-            <button
-              type="button"
-              onClick={handleRenderWidget}
-              className="cursor-pointer my-4! bg-green-600 hover:bg-green-700 text-white py-2! px-4! rounded-md min-w-[150px]"
-            >
-              Verify
-            </button>
-          )}
           <div ref={widgetRef} className="my-2!" />
           <button
             type="submit"
